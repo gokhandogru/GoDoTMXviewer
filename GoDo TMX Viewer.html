@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GoDo TMX Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500" rel="stylesheet">
+  <style>
+    :root {
+      --primary-color: #6200EE; /* Purple */
+      --secondary-color: #03DAC6; /* Teal */
+      --background-color: #F5F5F5; /* Light Grey */
+      --text-color: #333;
+      --header-text-color: #fff;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Roboto', sans-serif;
+      background-color: var(--background-color);
+      color: var(--text-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+    }
+
+    h1 {
+      background-color: var(--primary-color);
+      color: var(--header-text-color);
+      padding: 16px;
+      border-radius: 4px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      margin-bottom: 24px;
+    }
+
+    #controls {
+      width: 100%;
+      max-width: 800px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    #controls input[type="file"] {
+      flex: 1 1 100%;
+      padding: 8px;
+      border: none;
+      background-color: var(--secondary-color);
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    #controls input[type="file"]:hover {
+      background-color: #02c1ad;
+    }
+
+    .search-group {
+      flex: 1 1 calc(50% - 16px);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .search-group label {
+      margin-bottom: 4px;
+      font-weight: bold;
+    }
+
+    .search-group input[type="text"] {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 1em;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+
+    .search-group input[type="text"]:focus {
+      border-color: var(--primary-color);
+    }
+
+    /* Container to keep table within viewport */
+    .table-container {
+      width: 100%;
+      max-width: 800px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+      table-layout: fixed;
+    }
+
+    thead {
+      background-color: var(--primary-color);
+      color: var(--header-text-color);
+    }
+
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+
+    @media (max-width: 600px) {
+      .search-group {
+        flex: 1 1 100%;
+      }
+      th, td {
+        padding: 8px 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>GoDo TMX Viewer</h1>
+  <div id="controls">
+    <input type="file" id="tmxFile" accept=".tmx" />
+    <div class="search-group">
+      <label for="searchSource">Search Source:</label>
+      <input type="text" id="searchSource" placeholder="Enter search term(s) for source" />
+    </div>
+    <div class="search-group">
+      <label for="searchTarget">Search Target:</label>
+      <input type="text" id="searchTarget" placeholder="Enter search term(s) for target" />
+    </div>
+  </div>
+  <div class="table-container">
+    <table id="tmxTable">
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Target</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    let translationUnits = [];
+
+    // Handle TMX file upload
+    document.getElementById('tmxFile').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        parseTMX(e.target.result);
+      };
+      reader.readAsText(file);
+    });
+
+    // Parse TMX XML content
+    function parseTMX(xmlContent) {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlContent, "application/xml");
+
+      // Check for XML parsing errors
+      if (xmlDoc.getElementsByTagName("parsererror").length) {
+        alert("Error parsing TMX file.");
+        return;
+      }
+
+      // Clear any existing translation units
+      translationUnits = [];
+
+      // TMX files typically have the structure: <tmx><body><tu>...</tu></body></tmx>
+      const tuElements = xmlDoc.getElementsByTagName("tu");
+      for (let tu of tuElements) {
+        const tuvElements = tu.getElementsByTagName("tuv");
+        // For simplicity, process only translation units with at least two segments
+        if (tuvElements.length < 2) continue;
+
+        // Assume the first segment is the source and the second is the target.
+        let sourceText = "";
+        let targetText = "";
+        for (let i = 0; i < 2; i++) {
+          const seg = tuvElements[i].getElementsByTagName("seg")[0];
+          if (seg) {
+            if (i === 0) {
+              sourceText = seg.textContent.trim();
+            } else {
+              targetText = seg.textContent.trim();
+            }
+          }
+        }
+        translationUnits.push({ source: sourceText, target: targetText });
+      }
+      displayUnits();
+    }
+
+    // Display translation units in the table
+    function displayUnits() {
+      const tbody = document.querySelector("#tmxTable tbody");
+      tbody.innerHTML = "";
+      translationUnits.forEach(unit => {
+        const tr = document.createElement("tr");
+        const tdSource = document.createElement("td");
+        tdSource.textContent = unit.source;
+        const tdTarget = document.createElement("td");
+        tdTarget.textContent = unit.target;
+        tr.appendChild(tdSource);
+        tr.appendChild(tdTarget);
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Filter displayed units based on search terms
+    function filterUnits() {
+      const searchSource = document.getElementById("searchSource").value.toLowerCase();
+      const searchTarget = document.getElementById("searchTarget").value.toLowerCase();
+      const tbody = document.querySelector("#tmxTable tbody");
+      tbody.innerHTML = "";
+      translationUnits.forEach(unit => {
+        if (unit.source.toLowerCase().includes(searchSource) &&
+            unit.target.toLowerCase().includes(searchTarget)) {
+          const tr = document.createElement("tr");
+          const tdSource = document.createElement("td");
+          tdSource.textContent = unit.source;
+          const tdTarget = document.createElement("td");
+          tdTarget.textContent = unit.target;
+          tr.appendChild(tdSource);
+          tr.appendChild(tdTarget);
+          tbody.appendChild(tr);
+        }
+      });
+    }
+
+    // Add event listeners for search inputs
+    document.getElementById("searchSource").addEventListener("input", filterUnits);
+    document.getElementById("searchTarget").addEventListener("input", filterUnits);
+  </script>
+</body>
+</html>
